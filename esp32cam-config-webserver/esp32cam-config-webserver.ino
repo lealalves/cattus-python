@@ -1,15 +1,12 @@
 #include "esp_camera.h"
 #include <WiFi.h>
+#include <WiFiManager.h> 
 
 #define CAMERA_MODEL_AI_THINKER // Has PSRAM
 
 #include "camera_pins.h"
 
-// ===========================
-// Enter your WiFi credentials
-// ===========================
-const char *ssid = "Leal";
-const char *password = "familiafeliz@2024";
+WiFiManager wifiManager;
 
 void startCameraServer();
 void setupLedFlash(int pin);
@@ -39,7 +36,7 @@ void setup() {
   config.pin_pwdn = PWDN_GPIO_NUM;
   config.pin_reset = RESET_GPIO_NUM;
   config.xclk_freq_hz = 16000000;
-  config.frame_size = FRAMESIZE_VGA;
+  config.frame_size = FRAMESIZE_SVGA;
   config.pixel_format = PIXFORMAT_JPEG;
   config.grab_mode = CAMERA_GRAB_WHEN_EMPTY;
   config.fb_location = CAMERA_FB_IN_PSRAM;
@@ -66,15 +63,11 @@ void setup() {
   setupLedFlash(LED_GPIO_NUM);
 #endif
 
-  WiFi.begin(ssid, password);
-  WiFi.setSleep(false);
+  wifiManager.autoConnect("ESP32Cam_AP");
 
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print("Connecting...\n");
-  }
-  Serial.println("");
-  Serial.println("WiFi connected");
+  Serial.println();
+  Serial.print("Conectado ao WiFi. IP: ");
+  Serial.println(WiFi.localIP());
 
   startCameraServer();
 
