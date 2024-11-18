@@ -12,7 +12,7 @@ CORS(app)
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
 
 # Configurações do YOLO e da captura de vídeo
-ip = "http://192.168.227.157"
+ip = "http://192.168.0.110"
 esp32_url = f"{ip}:81/stream"
 cap = None
 model = YOLO("best.pt")
@@ -58,11 +58,11 @@ def video_feed():
             # Realiza a detecção a cada 'frames_interval' frames
             if frame_count % frames_interval == 0:
                 results = model(img, conf=0.90)
-                img = results.plot()
+                img = results[0].plot()
                 # emitir_deteccoes(results, socketio)
 
             # Codificar o frame como JPEG para enviar via streaming
-            buffer = cv2.imencode(".jpg", img)
+            r, buffer = cv2.imencode(".jpg", img)
             img = buffer.tobytes()
 
             yield (b"--frame\r\n" b"Content-Type: image/jpeg\r\n\r\n" + img + b"\r\n")
@@ -74,4 +74,5 @@ def video_feed():
 
 # Iniciar o servidor Flask
 if __name__ == "__main__":
+    print("##################### Rota http://localhost:5000/camera_stream disponivel #####################")
     socketio.run(app, host="0.0.0.0", port=5000)
