@@ -1,4 +1,4 @@
-# Cattus API NodeJs
+# Cattus API Python
 
 Repositório da API consumida pelo Mobile [Cattus Mobile]()
 
