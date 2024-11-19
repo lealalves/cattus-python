@@ -12,7 +12,7 @@ CORS(app)
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
 
 # Configurações do YOLO e da captura de vídeo
-ip = "http://192.168.0.110"
+ip = input("Digite o IP da ESP32-CAM: \n")
 esp32_url = f"{ip}:81/stream"
 cap = None
 model = YOLO("best.pt")
