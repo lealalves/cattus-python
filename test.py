@@ -6,6 +6,7 @@ import time
 import os
 import subprocess
 from flask_socketio import SocketIO
+import threading
 
 from utils import emitir_deteccoes
 
@@ -14,7 +15,7 @@ CORS(app)
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
 
 # Configurações do YOLO e da captura de vídeo
-ip = input("Digite o IP da ESP32-CAM: \n")
+ip = "192.168.202.157"
 esp32_url = f"http://{ip}:81/stream"
 model = YOLO("best.pt")
 
@@ -25,7 +26,7 @@ frame_count = 0
 hls_output_dir = "hls_stream"
 hls_playlist = os.path.join(hls_output_dir, "stream.m3u8")
 
-# Variável global para gerenciar o processo do FFmpeg
+# Variável global para gerenciar o processo do FFmpeg192.168.202.157
 ffmpeg_process = None
 
 # caminho para o FFMPeg 
@@ -40,7 +41,7 @@ def process_frame(img):
 
     # Realiza a detecção a cada 'frames_interval' frames
     if frame_count % frames_interval == 0:
-        results = model(img, conf=0.90)
+        results = model(img, conf=0.90, verbose=False)
         img = results[0].plot()
         # emitir_deteccoes(results, socketio)
     return img
@@ -70,36 +71,54 @@ def start_hls_stream():
                 continue
 
             frame = cv2.resize(frame, (640, 640))
-            frame = process_frame(frame)
+            frame = process_frame(frame)  # Aqui você processa o frame (YOLO, etc.)
 
             # Salva o frame processado em um arquivo temporário
             temp_file = os.path.join(hls_output_dir, "temp_frame.jpg")
-            cv2.imwrite(temp_file, frame)
+            if not cv2.imwrite(temp_file, frame):
+                print("Erro ao salvar frame no arquivo temp_frame.jpg")
+                break  # Sai do loop se não conseguir salvar
 
     # Inicia a thread de captura e processamento
-    import threading
-
     capture_thread = threading.Thread(target=capture_and_process, daemon=True)
     capture_thread.start()
-    print(os.path.join(hls_output_dir, "segment_%03d.ts"))
+
     # Comando FFmpeg para criar a stream HLS
     ffmpeg_cmd = [
         ffmpeg_path,
-        "-framerate", "1",
-        "-re",  # Trata o arquivo como um stream em tempo real
-        "-i", os.path.join(hls_output_dir, "temp_frame.jpg"),  # Entrada: frame processado
+        "-re",  # Trata a entrada como um stream em tempo real
+        "-loop", "1",  # Loop para o último frame gerado, até que o próximo esteja disponível
+        "-i", os.path.join(hls_output_dir, "temp_frame.jpg"),  # Entrada do frame
+        "-r", "15",
+        "-vf", "scale=640:640",  # Garante a resolução de saída
         "-c:v", "libx264",  # Codec H.264
+        "-threads", "6",
         "-preset", "ultrafast",  # Preset rápido
-        "-g", "1",  # Intervalo de keyframes (25 quadros)
-        "-hls_time", "4",
-        "-hls_list_size", "5",  # Quantidade de segmentos no playlist (limite de 5 segmentos na playlist)
-        "-f", "segment",  # Duração de cada segmento (10 segundos, ajuste conforme necessário)
-        "-hls_segment_filename", os.path.join(hls_output_dir, "segment_000.ts"),  # Nome dos arquivos de segmento
-        os.path.join(hls_output_dir, "stream.m3u8"),  # Arquivo de saída da playlist
+        "-g", "30",  # Intervalo de keyframes (o dobro do FPS)
+        "-hls_time", "2",  # Segmentos de 2 segundos
+        "-hls_list_size", "5",  # Mantém no máximo 5 segmentos no playlist
+        "-hls_flags", "delete_segments",  # Remove segmentos antigos
+        "-hls_segment_filename", os.path.join(hls_output_dir, "segment_%03d.ts"),
+        os.path.join(hls_output_dir, "stream.m3u8"),
     ]
 
     # Inicia o processo FFmpeg
-    ffmpeg_process = subprocess.Popen(ffmpeg_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    try:
+        ffmpeg_process = subprocess.Popen(
+            ffmpeg_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+        )
+        print("FFmpeg iniciado com sucesso")
+    except Exception as e:
+        print(f"Erro ao iniciar o FFmpeg: {e}")
+
+    # Monitore os logs do FFmpeg
+    def monitor_ffmpeg():
+        stdout, stderr = ffmpeg_process.communicate()
+        print("FFmpeg stdout:", stdout.decode())
+        print("FFmpeg stderr:", stderr.decode())
+
+    monitor_thread = threading.Thread(target=monitor_ffmpeg, daemon=True)
+    monitor_thread.start()
 
 
 @app.route("/start_stream", methods=["GET"])
@@ -134,12 +153,9 @@ def stop_stream():
 def get_stream():
     """Rota para retornar o HLS playlist."""
     if os.path.exists(hls_playlist):
-            # Caminho do stream HLS
-            stream_url = os.path.join("http://localhost:5000", "hls_stream", "stream.m3u8")
-            # Substituir barras invertidas por barras normais
-            stream_url = stream_url.replace("\\", "/")
-
-    return jsonify({"url": stream_url})
+        # Monta a URL do stream HLS manualmente (evitando problemas com `os.path.join`)
+        stream_url = f"http://localhost:5000/hls_stream/stream.m3u8"
+        return jsonify({"url": stream_url})
 
     return jsonify({"error": "Stream não encontrada. Inicie a transmissão primeiro."}), 404
 
