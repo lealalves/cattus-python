@@ -5,15 +5,14 @@ import cv2
 import time
 from flask_socketio import SocketIO
 
-from utils import emitir_deteccoes
+# from utils import emitir_deteccoes
 
 app = Flask(__name__)
 CORS(app)
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
 
 # Configurações do YOLO e da captura de vídeo
-ip = input("Digite o IP da ESP32-CAM: \n")
-esp32_url = f"{ip}:81/stream"
+cam_url = input("Digite o IP camera: \n")
 cap = None
 model = YOLO("best.pt")
 
@@ -21,14 +20,13 @@ frames_interval = 5  # Intervalo de frames para realizar a detecção
 frame_count = 0
 
 
-# Função para abrir o stream da ESP32-CAM
 def open_video_stream():
     global cap
     if cap is not None:
         cap.release()
-    cap = cv2.VideoCapture(esp32_url)
+    cap = cv2.VideoCapture(cam_url)
     if not cap.isOpened():
-        print("Erro ao conectar com a câmera ESP32. Tentando novamente...")
+        print("Erro ao conectar com a câmera. Tentando novamente...")
         time.sleep(5)  # Espera 5 segundos antes de tentar reconectar
         return open_video_stream()
 
@@ -43,7 +41,7 @@ def handle_connect():
 def video_feed():
     def generate_frames():
         global frame_count
-        open_video_stream()  # Abrir o stream da ESP32-CAM
+        open_video_stream()
 
         while True:
             success, img = cap.read()
